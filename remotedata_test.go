@@ -1,25 +1,42 @@
 package remotedata
 
 import (
+	"log"
 	"testing"
 	"time"
 
 	"github.com/tidwall/gjson"
 )
 
-func TestCase(t *testing.T) {
+func init() {
+	log.Println(`
+	----- testing needs: 
+	docker run -p 80:80 kennethreitz/httpbin
+	echo "127.0.0.1   httpbin.org" >> /etc/hosts`)
+}
+
+var httpbinGetCurl = `curl 'http://httpbin.org/get' \
+-H 'authority: www.httpbin.org' \
+-H 'cache-control: max-age=0' \
+-H 'upgrade-insecure-requests: 1' \
+-H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36' \
+-H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9' \
+-H 'sec-fetch-site: none' \
+-H 'sec-fetch-mode: navigate' \
+-H 'sec-fetch-user: ?1' \
+-H 'sec-fetch-dest: document' \
+-H 'accept-language: zh-CN,zh;q=0.9,ja;q=0.8' \
+--compressed`
+
+func TestCaseIntervalUpdate(t *testing.T) {
 	var completedCount = 0
 	var create = func() *RemoteData {
 		data := Default()
-		cbash := `curl 'https://www.xe.com/zh-CN/api/stats.php?fromCurrency=VND&toCurrency=CNY' \
-	-H 'Accept: application/json, text/plain, */*' \
-	-H 'Referer: https://www.xe.com/zh-CN/currencyconverter/convert/?Amount=1&From=VND&To=CNY' \
-	-H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36' \
-	--compressed`
+		cbash := httpbinGetCurl
 		data.AddParam(cbash)
 		data.SetOnUpdateCompleted(func(content interface{}) (value interface{}, ok bool) {
 			r := gjson.ParseBytes(content.([]byte))
-			average := r.Get("payload.Last_30_Days.average")
+			average := r.Get("headers.Host")
 			if average.Exists() {
 				completedCount++
 				return average.Float(), true
@@ -63,4 +80,26 @@ func TestCase(t *testing.T) {
 	// t.Error(data.Value())
 	// t.Error(data.Value())
 	// t.Error(data.Value())
+}
+
+func TestHttpGet(t *testing.T) {
+	data := New()
+	data.SetUpdateMethod(MethodHTTPGet)
+	data.AddParam("http://httpbin.org/get")
+	if data.Value() == nil {
+		t.Error("error get")
+	}
+}
+
+func TestOnError(t *testing.T) {
+	data := New()
+	data.SetUpdateMethod(MethodHTTPGet)
+	data.AddParam("http://httpbin.org:1/get")
+	data.SetOnError(func(err error) {
+		if err == nil {
+			t.Error(err)
+		}
+	})
+	data.Value()
+
 }

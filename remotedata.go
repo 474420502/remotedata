@@ -29,7 +29,7 @@ type RemoteData struct {
 
 // DefaultUpdateComplete 默认完成更新后的处理事件
 var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok bool) {
-	return string(content.([]byte)), ok
+	return string(content.([]byte)), true
 }
 
 // New remotedata 必须由New创建
@@ -38,7 +38,7 @@ func New() *RemoteData {
 	rd.targetCurl = linkedlist.New()
 	rd.onUpdateCompleted = DefaultUpdateComplete
 	rd.onError = func(err error) {
-		log.Println(err)
+		log.Println("default error handler:", err)
 	}
 	return rd
 }
@@ -46,7 +46,7 @@ func New() *RemoteData {
 // Default 默认使用gcurl更新方法
 func Default() *RemoteData {
 	rd := New()
-	rd.SetUpdateMethod(GCurlMethod)
+	rd.SetUpdateMethod(MethodGcurl)
 	return rd
 }
 
@@ -73,6 +73,9 @@ func (rd *RemoteData) SetOnUpdateCompleted(event func(content interface{}) (valu
 
 // SetUpdateMethod 更新数据的方式
 func (rd *RemoteData) SetUpdateMethod(method UpdateMethod) {
+	rd.valuelock.Lock()
+	defer rd.valuelock.Unlock()
+
 	rd.updateMethod = method
 }
 
@@ -111,6 +114,11 @@ func (rd *RemoteData) Update() {
 }
 
 func (rd *RemoteData) remoteUpdate() {
+
+	if rd.currentCurl == nil {
+		panic("Param is nil.  AddParam(p) before call Value()")
+	}
+
 	if rd.currentCurl.Next() {
 		if rd.updateMethod == nil {
 			panic("UpdateMethod is nil. please Set this.")
