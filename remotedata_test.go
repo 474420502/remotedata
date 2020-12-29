@@ -83,8 +83,7 @@ func TestCaseIntervalUpdate(t *testing.T) {
 }
 
 func TestHttpGet(t *testing.T) {
-	data := New()
-	data.SetUpdateMethod(MethodHTTPGet)
+	data := New(MethodHTTPGet)
 	data.AddParam("http://httpbin.org/get")
 	if data.Value() == nil {
 		t.Error("error get")
@@ -92,7 +91,7 @@ func TestHttpGet(t *testing.T) {
 }
 
 func TestOnError(t *testing.T) {
-	data := New()
+	data := New(MethodGcurl)
 	data.SetUpdateMethod(MethodHTTPGet)
 	data.AddParam("http://httpbin.org:1/get")
 	data.SetOnError(func(err error) {
@@ -102,4 +101,14 @@ func TestOnError(t *testing.T) {
 	})
 	data.Value()
 
+}
+
+func TestNoParam(t *testing.T) {
+	data := New(func(param interface{}) interface{} {
+		return 1
+	})
+
+	if data.Value().(int) != 1 {
+		t.Error("TestNoParam error")
+	}
 }

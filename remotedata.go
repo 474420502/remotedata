@@ -33,9 +33,11 @@ var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok boo
 }
 
 // New remotedata 必须由New创建
-func New() *RemoteData {
+func New(updateMethod UpdateMethod) *RemoteData {
 	rd := &RemoteData{}
 	rd.targetCurl = linkedlist.New()
+	rd.updateMethod = updateMethod
+
 	rd.onUpdateCompleted = DefaultUpdateComplete
 	rd.onError = func(err error) {
 		log.Println("default error handler:", err)
@@ -45,8 +47,7 @@ func New() *RemoteData {
 
 // Default 默认使用gcurl更新方法
 func Default() *RemoteData {
-	rd := New()
-	rd.SetUpdateMethod(MethodGcurl)
+	rd := New(MethodGcurl)
 	return rd
 }
 
@@ -79,7 +80,7 @@ func (rd *RemoteData) SetUpdateMethod(method UpdateMethod) {
 	rd.updateMethod = method
 }
 
-// AddParam 添加UpdateDataMethod的参数. 多个AddParam会像循环链表一样调用.
+// AddParam 添加UpdateDataMethod的参数. 多个AddParam会像循环链表一样调用. 例子: 多个地址负载
 func (rd *RemoteData) AddParam(c interface{}) {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
@@ -115,27 +116,30 @@ func (rd *RemoteData) Update() {
 
 func (rd *RemoteData) remoteUpdate() {
 
-	if rd.currentCurl == nil {
-		panic("Param is nil.  AddParam(p) before call Value()")
+	if rd.updateMethod == nil {
+		panic("UpdateMethod is nil. please Set this.")
 	}
 
-	if rd.currentCurl.Next() {
-		if rd.updateMethod == nil {
-			panic("UpdateMethod is nil. please Set this.")
+	var param interface{}
+
+	if rd.currentCurl != nil {
+		if rd.currentCurl.Next() {
+			param = rd.currentCurl.Value()
 		}
-		data := rd.updateMethod(rd.currentCurl.Value())
-		switch content := data.(type) {
-		case nil:
-		case error:
-			if rd.onError != nil {
-				rd.onError(content)
-			}
-		default:
-			if value, ok := rd.onUpdateCompleted(content); ok {
-				rd.value = value
-				rd.updateContent = content
-				return
-			}
+	}
+
+	data := rd.updateMethod(param)
+	switch content := data.(type) {
+	case nil:
+	case error:
+		if rd.onError != nil {
+			rd.onError(content)
+		}
+	default:
+		if value, ok := rd.onUpdateCompleted(content); ok {
+			rd.value = value
+			rd.updateContent = content
+			return
 		}
 	}
 }

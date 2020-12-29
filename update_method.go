@@ -28,3 +28,24 @@ var MethodHTTPGet UpdateMethod = func(param interface{}) interface{} {
 	}
 	return err
 }
+
+// Context 上下文
+// type Context struct {
+// 	param interface{}
+// 	share interface{} //用于更新共享数据. 传递上下文, 记录...
+// }
+
+// // GetShare Get return share interface{}
+// func (cxt *Context) GetShare() interface{} {
+// 	return cxt.share
+// }
+
+// // SetShare Set share interface{}
+// func (cxt *Context) SetShare(share interface{}) {
+// 	cxt.share = share
+// }
+
+// // GetParam 获取添加参数, 循环列表每次参数都会轮循. 便于多个不同地址的数据循环更新. 减少目标的负载
+// func (cxt *Context) GetParam() interface{} {
+// 	return cxt.param
+// }
