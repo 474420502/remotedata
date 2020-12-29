@@ -29,7 +29,7 @@ type RemoteData struct {
 
 // DefaultUpdateComplete 默认完成更新后的处理事件
 var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok bool) {
-	return string(content.([]byte)), true
+	return content, true
 }
 
 // New remotedata 必须由New创建
