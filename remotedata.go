@@ -51,12 +51,12 @@ func Default() *RemoteData {
 	return rd
 }
 
-// SetDisableInterval 设置不允许时间间隔更新
+// SetDisableInterval 设置不允许时间间隔更新. 默认true.(不以时间间隔更新)
 func (rd *RemoteData) SetDisableInterval(is bool) {
 	rd.isUpdateWithInterval = !is
 }
 
-// SetInterval 设置时间间隔. nil为不更新
+// SetInterval 设置时间间隔 同时SetDisableInterval(false). nil为不更新.
 func (rd *RemoteData) SetInterval(dur time.Duration) {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
@@ -98,7 +98,7 @@ func (rd *RemoteData) SetOnError(onError func(err error)) {
 	rd.onError = onError
 }
 
-// Value 获取值
+// Value 获取值. 如果不设置SetInterval. 默认只更新一次. 可以使用Update做主动更新
 func (rd *RemoteData) Value() interface{} {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
