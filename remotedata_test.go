@@ -1,6 +1,7 @@
 package remotedata
 
 import (
+	"io/ioutil"
 	"log"
 	"testing"
 	"time"
@@ -85,7 +86,11 @@ func TestCaseIntervalUpdate(t *testing.T) {
 func TestHttpGet(t *testing.T) {
 	data := New(MethodHTTPGet)
 	data.AddParam("http://httpbin.org/get")
-	if data.Value() == nil {
+	if data.Value() == nil { // 默认更新一次
+		t.Error("error get")
+	}
+
+	if data.Value() == nil { // 默认更新一次
 		t.Error("error get")
 	}
 }
@@ -110,5 +115,32 @@ func TestNoParam(t *testing.T) {
 
 	if data.Value().(int) != 1 {
 		t.Error("TestNoParam error")
+	}
+}
+
+func TestReadFile(t *testing.T) {
+	data := New(func(param interface{}) interface{} {
+		data, err := ioutil.ReadFile("test.json")
+		if err != nil {
+			return err
+		}
+		return data
+	})
+
+	data.SetInterval(time.Second * 1) // 每一次更新一次. 可以做配置热更新
+
+	if string(data.Value().([]byte)) != `{ "a": 1, "b": 2 }` {
+		t.Error("TestReadFile error")
+	}
+
+}
+
+func TestReadFile1(t *testing.T) {
+	data := New(MethodReadFile)
+	data.AddParam("test.json")
+	data.SetInterval(time.Second * 1) // 每一次更新一次. 可以做配置热更新
+
+	if string(data.Value().([]byte)) != `{ "a": 1, "b": 2 }` {
+		t.Error("TestReadFile error")
 	}
 }
