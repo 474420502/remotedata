@@ -17,8 +17,10 @@ type RemoteData struct {
 	interval time.Duration
 
 	isUpdateWithInterval bool // 是否按照时间间隔更新
-	isAsync              bool // 异步
-	aysncData            *RemoteData
+
+	isAsync         bool // 异步
+	cacheAsyncValue interface{}
+	asyncLock       sync.Mutex
 
 	updateContent     interface{}
 	onUpdateCompleted func(content interface{}) (value interface{}, ok bool)
@@ -108,14 +110,16 @@ func (rd *RemoteData) SetOnError(onError func(err error)) {
 
 // Value 获取值
 func (rd *RemoteData) Value() interface{} {
-	rd.valuelock.Lock()
-	defer rd.valuelock.Unlock()
-	if rd.isAsync {
 
-	} else {
-		rd.checkUpdate()
+	if rd.isAsync {
+		// go rd.checkUpdate()
+		return rd.cacheAsyncValue
 	}
 
+	rd.valuelock.Lock()
+	defer rd.valuelock.Unlock()
+
+	rd.checkUpdate()
 	return rd.value
 }
 
