@@ -13,9 +13,12 @@ type RemoteData struct {
 	currentCurl *linkedlist.CircularIterator
 	targetCurl  *linkedlist.LinkedList
 
-	update               time.Time
-	interval             time.Duration
-	isUpdateWithInterval bool
+	update   time.Time
+	interval time.Duration
+
+	isUpdateWithInterval bool // 是否按照时间间隔更新
+	isAsync              bool // 异步
+	aysncData            *RemoteData
 
 	updateContent     interface{}
 	onUpdateCompleted func(content interface{}) (value interface{}, ok bool)
@@ -49,6 +52,11 @@ func New(updateMethod UpdateMethod) *RemoteData {
 func Default() *RemoteData {
 	rd := New(MethodGcurl)
 	return rd
+}
+
+// SetAsync 设置不允许时间间隔更新
+func (rd *RemoteData) SetAsync(is bool) {
+	rd.isAsync = is
 }
 
 // SetDisableInterval 设置不允许时间间隔更新
@@ -102,7 +110,12 @@ func (rd *RemoteData) SetOnError(onError func(err error)) {
 func (rd *RemoteData) Value() interface{} {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
-	rd.checkUpdate()
+	if rd.isAsync {
+
+	} else {
+		rd.checkUpdate()
+	}
+
 	return rd.value
 }
 
