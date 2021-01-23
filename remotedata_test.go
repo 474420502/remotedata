@@ -62,7 +62,7 @@ func TestCaseIntervalUpdate(t *testing.T) {
 
 	completedCount = 0
 	data = create()
-	data.SetDisableInterval(true) // 不按时间间隔更新
+	data.SetDisableInterval() // 不按时间间隔更新
 	for i := 0; i < 5; i++ {
 		// t.Error(data.Value())
 		data.Value()
@@ -142,5 +142,30 @@ func TestReadFile1(t *testing.T) {
 
 	if string(data.Value().([]byte)) != `{ "a": 1, "b": 2 }` {
 		t.Error("TestReadFile error")
+	}
+}
+
+func TestUpdateConditon(t *testing.T) {
+	n := 0
+	data := New(func(param interface{}) interface{} {
+		n++
+		return n
+	})
+	after2sec := time.Now().Add(time.Second * 1)
+	data.SetIntervalCondition(func(update time.Time) bool {
+		if after2sec.Before(time.Now()) {
+			return true
+		}
+		return false
+	})
+
+	for i := 0; i < 10; i++ {
+		if data.Value().(int) != 1 {
+			t.Error("data should be 1")
+		}
+		time.Sleep(time.Millisecond * 100)
+	}
+	if data.Value().(int) != 2 {
+		t.Error("data should be 2")
 	}
 }

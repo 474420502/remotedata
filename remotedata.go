@@ -4,18 +4,14 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	linkedlist "github.com/474420502/focus/list/linked_list"
 )
 
 // RemoteData 远程数据
 type RemoteData struct {
-	currentCurl *linkedlist.CircularIterator
-	targetCurl  *linkedlist.LinkedList
+	current int
+	params  []interface{}
 
-	update               time.Time
-	interval             time.Duration
-	isUpdateWithInterval bool
+	updateWithInterval *updateInterval
 
 	updateContent     interface{}
 	onUpdateCompleted func(content interface{}) (value interface{}, ok bool)
@@ -27,6 +23,12 @@ type RemoteData struct {
 	value     interface{}
 }
 
+type updateInterval struct {
+	Update          time.Time
+	Interval        time.Duration
+	UpdateCondition func(update time.Time) bool
+}
+
 // DefaultUpdateComplete 默认完成更新后的处理事件
 var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok bool) {
 	return content, true
@@ -35,7 +37,7 @@ var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok boo
 // New remotedata 必须由New创建
 func New(updateMethod UpdateMethod) *RemoteData {
 	rd := &RemoteData{}
-	rd.targetCurl = linkedlist.New()
+
 	rd.updateMethod = updateMethod
 
 	rd.onUpdateCompleted = DefaultUpdateComplete
@@ -52,16 +54,36 @@ func Default() *RemoteData {
 }
 
 // SetDisableInterval 设置不允许时间间隔更新. 默认true.(不以时间间隔更新)
-func (rd *RemoteData) SetDisableInterval(is bool) {
-	rd.isUpdateWithInterval = !is
+func (rd *RemoteData) SetDisableInterval() {
+	rd.valuelock.Lock()
+	defer rd.valuelock.Unlock()
+	// rd.isUpdateWithInterval = !is
+	rd.updateWithInterval = nil
 }
 
-// SetInterval 设置时间间隔 同时SetDisableInterval(false). nil为不更新.
+// SetInterval 设置时间间隔 同时SetDisableInterval(). nil为不更新.
 func (rd *RemoteData) SetInterval(dur time.Duration) {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
-	rd.interval = dur
-	rd.isUpdateWithInterval = true
+	rd.updateWithInterval = &updateInterval{
+		Interval: dur,
+		UpdateCondition: func(update time.Time) bool {
+			now := time.Now()
+			if now.Sub(update) >= rd.updateWithInterval.Interval {
+				return true
+			}
+			return false
+		},
+	}
+}
+
+// SetIntervalCondition 设置时间间隔 同时SetDisableInterval(). 不更新.
+func (rd *RemoteData) SetIntervalCondition(cond func(update time.Time) bool) {
+	rd.valuelock.Lock()
+	defer rd.valuelock.Unlock()
+	rd.updateWithInterval = &updateInterval{
+		UpdateCondition: cond,
+	}
 }
 
 // SetOnUpdateCompleted 设置更新后处理远程获取内容的事件
@@ -85,10 +107,7 @@ func (rd *RemoteData) AddParam(c interface{}) {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
 
-	rd.targetCurl.PushBack(c)
-	if rd.currentCurl == nil {
-		rd.currentCurl = rd.targetCurl.CircularIterator()
-	}
+	rd.params = append(rd.params, c)
 }
 
 // SetOnError 错误处理
@@ -111,7 +130,10 @@ func (rd *RemoteData) Update() {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
 	rd.remoteUpdate()
-	rd.update = time.Now()
+
+	if rd.updateWithInterval != nil {
+		rd.updateWithInterval.Update = time.Now()
+	}
 }
 
 func (rd *RemoteData) remoteUpdate() {
@@ -122,9 +144,11 @@ func (rd *RemoteData) remoteUpdate() {
 
 	var param interface{}
 
-	if rd.currentCurl != nil {
-		if rd.currentCurl.Next() {
-			param = rd.currentCurl.Value()
+	if len(rd.params) != 0 {
+		param = rd.params[rd.current]
+		rd.current++
+		if rd.current >= len(rd.params) {
+			rd.current = 0
 		}
 	}
 
@@ -145,11 +169,18 @@ func (rd *RemoteData) remoteUpdate() {
 }
 
 func (rd *RemoteData) checkUpdate() { //
-	if rd.isUpdateWithInterval || rd.value == nil {
-		now := time.Now()
-		if now.Sub(rd.update) >= rd.interval {
+
+	if rd.value == nil {
+		rd.remoteUpdate()
+		if rd.updateWithInterval != nil {
+			rd.updateWithInterval.Update = time.Now()
+		}
+	}
+
+	if rd.updateWithInterval != nil {
+		if rd.updateWithInterval.UpdateCondition(rd.updateWithInterval.Update) {
 			rd.remoteUpdate()
-			rd.update = time.Now()
+			rd.updateWithInterval.Update = time.Now()
 		}
 	}
 }
