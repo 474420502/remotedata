@@ -3,24 +3,26 @@ package remotedata
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	linkedlist "github.com/474420502/focus/list/linked_list"
 )
 
 // RemoteData 远程数据
 type RemoteData struct {
-	currentCurl *linkedlist.CircularIterator
-	targetCurl  *linkedlist.LinkedList
+	current int
+	params  []interface{}
+	// currentCurl *linkedlist.CircularIterator
+	// targetCurl  *linkedlist.LinkedList
 
-	update   time.Time
-	interval time.Duration
-
+	update               time.Time
+	interval             time.Duration
 	isUpdateWithInterval bool // 是否按照时间间隔更新
 
-	isAsync         bool // 异步
-	cacheAsyncValue interface{}
-	asyncLock       sync.Mutex
+	async *struct { // 异步
+		isUpdating      int64
+		cacheAsyncValue interface{}
+		// asyncLock       sync.Mutex
+	}
 
 	updateContent     interface{}
 	onUpdateCompleted func(content interface{}) (value interface{}, ok bool)
@@ -40,7 +42,7 @@ var DefaultUpdateComplete = func(content interface{}) (value interface{}, ok boo
 // New remotedata 必须由New创建
 func New(updateMethod UpdateMethod) *RemoteData {
 	rd := &RemoteData{}
-	rd.targetCurl = linkedlist.New()
+
 	rd.updateMethod = updateMethod
 
 	rd.onUpdateCompleted = DefaultUpdateComplete
@@ -58,7 +60,14 @@ func Default() *RemoteData {
 
 // SetAsync 设置不允许时间间隔更新
 func (rd *RemoteData) SetAsync(is bool) {
-	rd.isAsync = is
+	if is {
+		rd.async = &struct {
+			isUpdating      int64
+			cacheAsyncValue interface{}
+		}{}
+		return
+	}
+	rd.async = nil
 }
 
 // SetDisableInterval 设置不允许时间间隔更新, 默认true.(不以时间间隔更新)
@@ -95,10 +104,12 @@ func (rd *RemoteData) AddParam(c interface{}) {
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
 
-	rd.targetCurl.PushBack(c)
-	if rd.currentCurl == nil {
-		rd.currentCurl = rd.targetCurl.CircularIterator()
-	}
+	rd.params = append(rd.params, c)
+
+	// rd.targetCurl.PushBack(c)
+	// if rd.currentCurl == nil {
+	// 	rd.currentCurl = rd.targetCurl.CircularIterator()
+	// }
 }
 
 // SetOnError 错误处理
@@ -110,14 +121,14 @@ func (rd *RemoteData) SetOnError(onError func(err error)) {
 
 // Value 获取值. 如果不设置SetInterval. 默认只更新一次. 可以使用Update做主动更新
 func (rd *RemoteData) Value() interface{} {
-
-	if rd.isAsync {
-		// go rd.checkUpdate()
-		return rd.cacheAsyncValue
-	}
-
 	rd.valuelock.Lock()
 	defer rd.valuelock.Unlock()
+
+	if rd.async != nil {
+		// go rd.checkUpdate()
+
+		return rd.async.cacheAsyncValue
+	}
 
 	rd.checkUpdate()
 	return rd.value
@@ -133,15 +144,23 @@ func (rd *RemoteData) Update() {
 
 func (rd *RemoteData) remoteUpdate() {
 
+	if rd.async != nil {
+		defer func() {
+			atomic.StoreInt64(&rd.async.isUpdating, 0)
+		}()
+	}
+
 	if rd.updateMethod == nil {
 		panic("UpdateMethod is nil. please Set this.")
 	}
 
 	var param interface{}
 
-	if rd.currentCurl != nil {
-		if rd.currentCurl.Next() {
-			param = rd.currentCurl.Value()
+	if rd.params != nil {
+		param = rd.params[rd.current]
+		rd.current++
+		if rd.current >= len(rd.params) {
+			rd.current = 0
 		}
 	}
 
@@ -156,7 +175,22 @@ func (rd *RemoteData) remoteUpdate() {
 		if value, ok := rd.onUpdateCompleted(content); ok {
 			rd.value = value
 			rd.updateContent = content
+
+			if rd.async != nil {
+				rd.async.cacheAsyncValue = rd.value
+			}
+
 			return
+		}
+	}
+}
+
+func (rd *RemoteData) checkUpdateAsync() { //
+	if rd.isUpdateWithInterval || rd.async.cacheAsyncValue == nil {
+		now := time.Now()
+		if now.Sub(rd.update) >= rd.interval {
+			rd.remoteUpdate()
+			rd.update = time.Now()
 		}
 	}
 }
